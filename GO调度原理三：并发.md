@@ -30,3 +30,57 @@
 此刻，有必要用一些例子来巩固一下你对哪种情况适合用并发，哪种情况不适合以及是否需要用并行的判别能力了。
 ### 求和
 我们不需要特别复杂的例子来描述这些场景，使用下面这个简单的求和函数的例子就可以：
+
+**Listing 1**
+
+	func add(numbers []int) int {
+	   var v int
+	   for _, n := range numbers {
+	       v += n
+	   }
+	   return v
+	}
+
+**Listing 1** 中是一个求和函数`add`，接受一个`int`数组返回数组所有元素的和。
+
+**问题**：这个add函数所负责的工作是否适合乱序执行？我认为答案是适合。这个数组可以拆分成小数组然后并发的执行。一旦所有的小数组都求和完成后，将他们的结果加起来就是最终的结果，和直接求和结果一样。
+
+然而，这会儿会有另外一个问题浮现。需要拆成多少数组才能达到最佳的吞吐呢？要回答这个问题，你需要先了解`add`函数属于哪种负载。`add`函数实际上是一种CPU约束型负载。因为它这个算法执行的是纯数学计算，任何时候都不会导致Go协程自然的进入到Waiting状态。这意味着每个OS/硬件线程跑一个Go协程就能达到很好的性能。
+
+**Listing 2** 中是实现的一个并发版求和函数`addConcurrent`
+
+> 注意：有很多种方式实现并发版的add，这里只是做个示例。
+
+**Listing 2** 
+
+	44 func addConcurrent(goroutines int, numbers []int) int {
+	45     var v int64
+	46     totalNumbers := len(numbers)
+	47     lastGoroutine := goroutines - 1
+	48     stride := totalNumbers / goroutines
+	49
+	50     var wg sync.WaitGroup
+	51     wg.Add(goroutines)
+	52
+	53     for g := 0; g < goroutines; g++ {
+	54         go func(g int) {
+	55             start := g * stride
+	56             end := start + stride
+	57             if g == lastGoroutine {
+	58                 end = totalNumbers
+	59             }
+	60
+	61             var lv int
+	62             for _, n := range numbers[start:end] {
+	63                 lv += n
+	64             }
+	65
+	66             atomic.AddInt64(&v, int64(lv))
+	67             wg.Done()
+	68         }(g)
+	69     }
+	70
+	71     wg.Wait()
+	72
+	73     return int(v)
+	74 }
