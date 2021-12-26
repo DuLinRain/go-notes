@@ -1,4 +1,4 @@
-# Go里面使用Copy和使用Pinter对性能的影响
+# Go里面使用Copy和使用Pointer对性能的影响
 
 go version go1.14.4 darwin/amd64
 
